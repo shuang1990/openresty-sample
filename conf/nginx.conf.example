@@ -1,0 +1,63 @@
+worker_processes  4;
+#error_log logs/error.log;
+#error_log logs/error.log;
+
+events {
+    worker_connections 1024;
+}
+http {
+
+    include       mime.types;
+    default_type  application/octet-stream;
+    server_tokens off;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  {{ log_dir }}/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    #keepalive_timeout  65;
+    charset utf-8;
+
+    gzip on;
+    gzip_http_version 1.0;
+    gzip_comp_level 2;
+    gzip_proxied any;
+    gzip_types text/plain text/css application/x-javascript text/xml application/xml application/xml+rss text/javascript application/json;
+
+    lua_package_path 'resty/?.lua;lua/?.lua;;';
+    #lua_code_cache off;
+    server {
+        listen 8000;
+
+        access_log  {{ log_dir }}/9douyu_access.log;
+        error_log   {{ log_dir }}/9douyu_error.log {{ log_level }};
+
+        location /up_avatar {
+            default_type application/json;
+            proxy_read_timeout  60;
+            proxy_set_header  X-Forwarded-Proto 'http';
+            proxy_set_header  Host              $host;
+            proxy_set_header  X-Real-IP         $remote_addr; # pass on real client's IP
+            proxy_set_header  X-Forwarded-For   $proxy_add_x_forwarded_for;
+            set $target '';
+            access_by_lua_file lua/upload.lua;
+            proxy_pass        http://$target;
+        }
+
+        location / {
+            resolver {{ dns_servers }};
+            default_type application/json;
+            content_by_lua_file lua/proxy.lua;
+        }
+
+
+        location ~ /(\.git|\.svn|\.htaccess) {
+            deny all;
+        }
+    }
+}
